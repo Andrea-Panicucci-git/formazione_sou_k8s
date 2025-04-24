@@ -1,0 +1,3 @@
+.DS_Store
+#regola DS_Store e vagrant 
+/.vagrant

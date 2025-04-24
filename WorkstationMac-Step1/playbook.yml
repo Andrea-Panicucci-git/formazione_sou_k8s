@@ -1,0 +1,99 @@
+- name: Step 1 - Installazione Docker
+  hosts: all
+  become: yes
+
+  tasks:
+    - name: Installa libreria python3-requests
+      ansible.builtin.package:
+        name: python3-requests
+        state: present
+
+    - name: Aggiorna cache dei pacchetti
+      ansible.builtin.package:
+        update_cache: yes
+
+    - name: Rimuovi podman-docker (previene conflitti con Docker CE)
+      ansible.builtin.dnf:
+        name: podman-docker
+        state: absent
+
+    - name: Aggiungi il repository Docker
+      ansible.builtin.shell: |
+        dnf config-manager --add-repo https://download.docker.com/linux/centos/docker-ce.repo
+      args:
+        creates: /etc/yum.repos.d/docker-ce.repo
+
+    - name: Installa Docker e i componenti necessari
+      ansible.builtin.package:
+        name:
+          - docker-ce
+          - docker-ce-cli
+          - containerd.io
+          - docker-compose-plugin
+        state: present
+
+    - name: Avvia e abilita Docker
+      ansible.builtin.service:
+        name: docker
+        state: started
+        enabled: yes
+
+
+- name: Step 2 - Configurazione rete e container Docker
+  hosts: all
+  become: yes
+
+  tasks:
+    - name: Crea rete Docker bridge 
+      community.docker.docker_network:
+        name: my_network
+        driver: bridge
+        ipam_config:
+          - subnet: "192.168.10.0/24"
+            gateway: "192.168.10.1"
+            
+
+    - name: Crea 
+      community.docker.docker_volume:
+        name: jenkins_data
+
+    - name: Avvia container Jenkins
+      community.docker.docker_container:
+        name: jenkins
+        image: jenkins/jenkins:lts
+        state: started
+        restart_policy: unless-stopped
+        ports:
+          - "8080:8080"
+          - "50000:50000"
+        volumes:
+          - jenkins_data:/var/jenkins_home
+        networks:
+          - name: my_network
+
+    - name: Avvia container agent 
+      community.docker.docker_container:
+        name: Jenkins-agent
+        image: jenkins/inbound-agent:latest
+        state: started
+        restart_policy: unless-stopped
+        env:
+          JENKINS_URL: http://jenkins:8080
+          JENKINS_SECRET: "2d250dfe6c4b1372fcef99b464ac2ba22748423b140a819a78c5446f6f88e66b"
+          JENKINS_AGENT_NAME: "Jenkins-agent"
+        # command: 
+        #   - java
+        #   - -jar
+        #   - /usr/share/jenkins/agent.jar
+        #   - -url
+        #   - http://jenkins:8080
+        #   - -secret
+        #   - 2d250dfe6c4b1372fcef99b464ac2ba22748423b140a819a78c5446f6f88e66b
+        #   - -name
+        #   - Jenkins-agent
+        networks:
+        - name: my_network
+          ipv4_address: 192.168.10.10
+
+
+        
