@@ -1,0 +1,78 @@
+pipeline {
+    agent {
+        label 'Jenkins_agent' 
+    }
+
+    environment {
+        GIT_URL = 'https://github.com/Andrea-Panicucci-git/formazione_sou_k8s'
+        IMAGE_NAME = 'andreapanicucci/docker-image'
+        DOCKER_CREDENTIALS_ID = 'DockerHub'
+    }
+
+    parameters {
+        
+        string(name: 'GIT_BRANCH', defaultValue: 'main', description: 'Git branch da costruire')
+        string(name: 'TAG', defaultValue: '', description: 'Tag opzionale per la release')
+    }
+
+    stages {
+        stage('Pulizia workspace') {
+            steps {
+                cleanWs()
+            }
+        }
+
+        stage('Clona repo git') {
+            steps {
+                script {
+                    echo "Clono la repository da ${GIT_URL}"
+                    if (params.TAG?.trim()) {
+                        sh "git clone --branch ${params.TAG} --depth 1 --single-branch ${GIT_URL}"
+                    } else if (params.GIT_BRANCH == 'main' || params.GIT_BRANCH == 'developer') {
+                        git url: "${GIT_URL}", branch: "${params.GIT_BRANCH}"
+                        sh 'ls -la'
+                    } else {
+                        error "Unsupported branch: ${params.GIT_BRANCH}"
+                    }
+                }
+            }
+        }
+
+        stage('Docker login') {
+            steps {
+                script {
+                    withCredentials([usernamePassword(credentialsId: "${DOCKER_CREDENTIALS_ID}", usernameVariable: 'DOCKER_USER', passwordVariable: 'DOCKER_PASS')]) {
+                        sh 'echo "$DOCKER_PASS" | docker login -u "$DOCKER_USER" --password-stdin && docker ps && ls -lah'
+                    }
+                }
+            }
+        }
+
+        stage('Build & Push Docker image') {
+            steps {
+                script {
+                    def tagToUse = ''
+                    def buildPath = './Step2'
+                    
+                    if (params.GIT_BRANCH == 'main' && params.TAG?.trim()) {
+                        tagToUse = params.TAG
+                        buildPath = './formazione_sou_k8s/Step2'
+                    } else if (params.GIT_BRANCH == 'developer') {
+                        def commitSHA = sh(script: 'git rev-parse --short HEAD', returnStdout: true).trim()
+                        tagToUse = "develop-${commitSHA}"
+                        
+                    } else if (params.GIT_BRANCH == 'main') {
+                        tagToUse = 'latest'
+                        
+                    } else {
+                        error "Unsupported branch: ${params.GIT_BRANCH}"
+                    }
+
+                    def customImage = docker.build("${IMAGE_NAME}:${tagToUse}", buildPath)
+                    customImage.push()
+                    echo "✅ Immagine Docker pushata con successo: ${IMAGE_NAME}:${tagToUse}"
+                }
+            }
+        }
+    }
+}
