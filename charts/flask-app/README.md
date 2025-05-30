@@ -8,7 +8,7 @@ Il chart è progettato per permettere la selezione del tag dell’immagine da ri
 ---
 
 ## Struttura del progetto:
-
+```
 formazione_sou_k8s/
 └── charts/
 └── flask-app-chart/
@@ -19,7 +19,7 @@ formazione_sou_k8s/
 │ ├── service.yaml
 │ └── ...
 └── ...
-
+```
 ---
 
 ## Prerequisiti
