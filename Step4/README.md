@@ -65,6 +65,6 @@ La pipeline eseguirà:
 ### 7. Verifica il deploy
 Dopo l’esecuzione, controlla i release Helm e assicurati che l’applicazione sia attiva nel namespace formazione-sou.
 
-### Conclusione:
+## Conclusione:
 
 Seguendo questi passaggi, puoi configurare un ambiente completo per sviluppare e distribuire applicazioni containerizzate su Kubernetes, tutto gestito automaticamente da Jenkins e supportato da Ansible e Vagrant.
