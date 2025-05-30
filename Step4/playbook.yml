@@ -1,0 +1,207 @@
+---
+- name: Verifica e installa Jenkins se non presente (per Ubuntu)
+  hosts: all
+  become: yes
+  tasks:
+
+
+    - name: Aggiorna la cache dei pacchetti APT
+      apt:
+        update_cache: yes
+        cache_valid_time: 3600
+
+    - name: Installa dipendenze per l'aggiunta di repository APT
+      apt:
+        name:
+          - ca-certificates
+          - curl
+          - gnupg
+          - lsb-release
+        state: present
+
+    - name: Aggiungi la chiave GPG di Docker
+      apt_key:
+        url: https://download.docker.com/linux/ubuntu/gpg
+        state: present
+
+    - name: Aggiungi repository Docker
+      apt_repository:
+        repo: "deb [arch=amd64] https://download.docker.com/linux/ubuntu {{ ansible_distribution_release | lower }} stable"
+        state: present
+        filename: docker
+
+    - name: Aggiorna la cache dopo l'aggiunta del repo Docker
+      apt:
+        update_cache: yes
+
+    - name: Installa Docker Engine
+      apt:
+        name:
+          - docker-ce
+          - docker-ce-cli
+          - containerd.io
+        state: present
+
+    - name: Avvia e abilita Docker
+      service:
+        name: docker
+        state: started
+        enabled: yes
+
+    - name: Aggiungi l'utente corrente al gruppo docker (opzionale)
+      user:
+        name: "{{ ansible_user }}"
+        groups: docker
+        append: yes
+
+    - name: Aggiorna la cache dei pacchetti APT
+      apt:
+        update_cache: yes
+        cache_valid_time: 3600
+
+    - name: Installa Java 17
+      apt:
+        name: openjdk-17-jdk
+        state: present
+
+    - name: Aggiungi la chiave GPG di Jenkins
+      apt_key:
+        url: https://pkg.jenkins.io/debian-stable/jenkins.io-2023.key
+        state: present
+
+    - name: Aggiungi il repository Jenkins
+      apt_repository:
+        repo: "deb https://pkg.jenkins.io/debian-stable binary/"
+        state: present
+
+    - name: Aggiorna la cache dei pacchetti dopo aver aggiunto il repo Jenkins
+      apt:
+        update_cache: yes
+
+    - name: Installa Jenkins
+      apt:
+        name: jenkins
+        state: present
+
+    - name: Avvia e abilita Jenkins
+      service:
+        name: jenkins
+        state: started
+        enabled: yes
+      tags: start-jenkins
+
+    - name: Ferma Jenkins (solo se specificato con tag)
+      service:
+        name: jenkins
+        state: stopped
+      tags: [never, stop-jenkins]
+
+    - name: Crea directory .kube per Jenkins
+      file:
+        path: /var/lib/jenkins/.kube
+        state: directory
+        owner: jenkins
+        group: jenkins
+        mode: '0755'
+
+    - name: Copia file kubeconfig nella directory di Jenkins
+      copy:
+        src: ~/.kube/config  # o ~/.kube/config se usi l'utente vagrant
+        dest: /var/lib/jenkins/.kube/config
+        owner: jenkins
+        group: jenkins
+        mode: '0644'
+
+    - name: Aggiungi utente Jenkins al gruppo docker
+      user:
+        name: jenkins
+        groups: docker
+        append: yes
+
+    - name: Riavvia il servizio Jenkins
+      service:
+        name: jenkins
+        state: restarted
+
+
+    - name: Verifica se kind è già installato
+      stat:
+        path: /usr/local/bin/kind
+      register: kind_stat
+
+    - name: Scarica kind (se non già installato)
+      get_url:
+        url: https://kind.sigs.k8s.io/dl/v0.22.0/kind-linux-amd64
+        dest: /usr/local/bin/kind
+        mode: '0755'
+      when: not kind_stat.stat.exists
+
+
+    - name: Check whether kubectl is installed
+      stat:
+        path: /usr/local/bin/kubectl
+      register: kubectl_exists
+
+    - name: Search for latest kubectl release
+      uri:
+        url: https://cdn.dl.k8s.io/release/stable.txt
+        return_content: true
+      register: kubectl_ver_response
+      when: not kubectl_exists.stat.exists
+
+    - name: Download/Install kubectl
+      get_url:
+        url: "https://dl.k8s.io/release/{{ kubectl_ver_response.content }}/bin/linux/amd64/kubectl"
+        dest: /usr/local/bin/kubectl
+        mode: 0755
+        group: root
+        owner: root
+      when: not kubectl_exists.stat.exists
+
+    - name: Verifica se Helm è già installato
+      stat:
+        path: /usr/local/bin/helm
+      register: helm_stat
+
+    - name: Scarica Helm (se non già installato)
+      get_url:
+        url: https://get.helm.sh/helm-v3.12.3-linux-amd64.tar.gz
+        dest: /tmp/helm.tar.gz
+        mode: '0644'
+      when: not helm_stat.stat.exists
+
+    - name: Estrai Helm
+      unarchive:
+        src: /tmp/helm.tar.gz
+        dest: /tmp/
+        remote_src: yes
+        creates: /tmp/linux-amd64/helm
+      when: not helm_stat.stat.exists
+
+    - name: Copia binario helm in /usr/local/bin
+      copy:
+        src: /tmp/linux-amd64/helm
+        dest: /usr/local/bin/helm
+        mode: '0755'
+      
+        remote_src: yes 
+      when: not helm_stat.stat.exists
+
+    - name: Pulisci archivio Helm scaricato
+      file:
+        path: /tmp/helm.tar.gz
+        state: absent
+      when: not helm_stat.stat.exists
+
+    - name: Pulisci directory estratta Helm
+      file:
+        path: /tmp/linux-amd64
+        state: absent
+      when: not helm_stat.stat.exists
+
+    - name: Imposta permessi sicuri per kubeconfig
+      file:
+        path: /var/lib/jenkins/.kube/config
+        owner: jenkins
+        group: jenkins
+        mode: '0600'

@@ -1,0 +1,23 @@
+# Vagrantfile per Ubuntu 22.04 LTS
+Vagrant.configure("2") do |config|
+    # Usa l'immagine di Ubuntu 22.04 LTS
+    config.vm.box = "ubuntu/jammy64"
+  
+    # Imposta la memoria e CPU (opzionale)
+    config.vm.provider "virtualbox" do |vb|
+      vb.name = "ubuntu-vm"
+      vb.memory = "2048"
+      vb.cpus = 2
+    end
+  
+    # Configura la rete (IP privato statico)
+    config.vm.network "private_network", ip: "192.168.56.10"
+    config.vm.network "forwarded_port", guest: 8080, host: 8080
+  
+  
+    # Provisioning (esempio: aggiornamento pacchetti)
+    config.vm.provision "ansible" do |ansible|
+    ansible.playbook = "playbook.yml"
+    
+    end 
+  end
